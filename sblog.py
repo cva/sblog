@@ -7,7 +7,7 @@ import urllib.request
 from bs4 import BeautifulSoup
 
 
-class Foo(object):
+class UniqueLog(object):
     def __init__(self, items=None, stateSize=100):
         if items is None:
             self.items = []
@@ -27,17 +27,16 @@ class Foo(object):
         return added
 
     def getState(self):
-        return self.lines
+        return self.items
 
 
 class LogFetcher(object):
-    def __init__(self, url='http://192.168.100.1/cmLogsData.htm'):
+    def __init__(self, url):
         self.url = url
 
     def fetch(self):
-        with urllib.request.urlopen(self.url) as f:
-            data = f.read().decode('utf-8')
-            soup = BeautifulSoup(data, 'html.parser')
+        with urllib.request.urlopen(self.url) as log:
+            soup = BeautifulSoup(log, 'html.parser')
             log_data = []
             for log_row in soup.table.find_all('tr'):
                 cols = [c.string for c in log_row.find_all('td')]
@@ -49,24 +48,29 @@ class LogFetcher(object):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Fetch logs from SB6141.')
+    parser = argparse.ArgumentParser(
+        description='Fetch logs from SB6141.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     parser.add_argument('--state', default='/var/run/sblog.state',
                         help='where to store state between runs')
     parser.add_argument('--url', default='http://192.168.100.1/cmLogsData.htm',
                         help='url for modem logs')
+    parser.add_argument('--interval', type=int, default=10,
+                        help='seconds to wait between fetches')
     parser.add_argument('--out', help='file to append log entries to')
 
     args = parser.parse_args()
-    f = LogFetcher(url=args.url)
-    logs = Foo()
+
+    fetcher = LogFetcher(url=args.url)
+    logs = UniqueLog()
+
     while True:
         try:
-            print('Fetching...')
-            new_logs = logs.update(f.fetch())
-
+            new_logs = logs.update(fetcher.fetch())
             for log_row in new_logs:
-                print(' '.join(log_row))
+                print(' '.join(log_row), flush=True)
         except urllib.error.URLError:
             pass
 
-        time.sleep(10)
+        time.sleep(args.interval)
